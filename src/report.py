@@ -94,62 +94,134 @@ def _write_sheet(
     worksheet.sheet_properties.outlinePr.summaryBelow = True
 
 
-def _song_rows(songs: list[SongStats], years: list[int]) -> list[tuple[object, ...]]:
-    rows: list[tuple[object, ...]] = []
-    for song in songs:
-        previous_year: int | None = None
-        row: list[object] = [
+def _song_summary_rows(songs: list[SongStats]) -> list[tuple[object, ...]]:
+    return [
+        (
             song.title, _artists_text(song.artists), song.release_year, song.appearances,
             song.best_position, song.average_position,
             song.average_position_with_absences, song.total_points,
-        ]
-        for year in years:
-            position = song.positions_by_year.get(year)
-            points = song.points_by_year.get(year, 0)
-            row.extend((position, points))
-            if previous_year is not None:
-                previous_position = song.positions_by_year.get(previous_year)
-                # Положительная дельта означает подъём в рейтинге.
-                position_delta = (
-                    previous_position - position
-                    if previous_position is not None and position is not None else None
-                )
-                points_delta = points - song.points_by_year.get(previous_year, 0)
-                row.extend((position_delta, points_delta))
-            previous_year = year
-        rows.append(tuple(row))
+        )
+        for song in songs
+    ]
+
+
+def _artist_summary_rows(artists: list[ArtistStats]) -> list[tuple[object, ...]]:
+    return [
+        (artist.artist, artist.appearances, artist.best_position,
+         artist.average_position, artist.total_points)
+        for artist in artists
+    ]
+
+
+def _song_year_rows(songs: list[SongStats], years: list[int], year: int) -> list[tuple[object, ...]]:
+    """Возвращает накопительный список песен, появлявшихся не позднее указанного года."""
+    index = years.index(year)
+    previous_year = years[index - 1] if index > 0 else None
+    rows: list[tuple[object, ...]] = []
+    for song in songs:
+        history = years[:index + 1]
+        if not any(song.positions_by_year.get(item) is not None for item in history):
+            continue
+
+        position = song.positions_by_year.get(year)
+        previous_position = song.positions_by_year.get(previous_year) if previous_year is not None else None
+        previous_cumulative = sum(song.points_by_year.get(item, 0) for item in years[:index])
+        current_year_points = song.points_by_year.get(year, 0)
+        cumulative = previous_cumulative + current_year_points
+        points_delta = cumulative - previous_cumulative if previous_year is not None else None
+        position_delta = previous_position - position if previous_position is not None and position is not None else None
+
+        earlier_appearances = [item for item in years[:index] if song.positions_by_year.get(item) is not None]
+        if position is None:
+            status = "OUT"
+        elif not earlier_appearances:
+            status = "NEW"
+        elif previous_position is None:
+            status = "RE"
+        else:
+            status = ""
+
+        rows.append((
+            song.title, _artists_text(song.artists), song.release_year, position,
+            current_year_points, cumulative, points_delta, position_delta, status,
+        ))
+
+    # Лидеры каждого исторического среза определяются накопленными баллами на конец года.
+    rows.sort(key=lambda row: (-int(row[5]), str(row[0]).casefold(), str(row[1]).casefold()))
     return rows
 
 
-def _artist_rows(artists: list[ArtistStats], years: list[int]) -> list[tuple[object, ...]]:
+def _artist_year_rows(artists: list[ArtistStats], years: list[int], year: int) -> list[tuple[object, ...]]:
+    """Возвращает накопительный список исполнителей, появлявшихся не позднее указанного года."""
+    index = years.index(year)
+    previous_year = years[index - 1] if index > 0 else None
     rows: list[tuple[object, ...]] = []
     for artist in artists:
-        previous_year: int | None = None
-        row: list[object] = [
-            artist.artist, artist.appearances, artist.best_position,
-            artist.average_position, artist.total_points,
-        ]
-        for year in years:
-            best_position = artist.best_positions_by_year.get(year)
-            average_position = artist.average_positions_by_year.get(year)
-            points = artist.points_by_year.get(year, 0)
-            row.extend((artist.appearances_by_year.get(year, 0), best_position, average_position, points))
-            if previous_year is not None:
-                previous_best = artist.best_positions_by_year.get(previous_year)
-                previous_average = artist.average_positions_by_year.get(previous_year)
-                best_delta = (
-                    previous_best - best_position
-                    if previous_best is not None and best_position is not None else None
-                )
-                average_delta = (
-                    previous_average - average_position
-                    if previous_average is not None and average_position is not None else None
-                )
-                points_delta = points - artist.points_by_year.get(previous_year, 0)
-                row.extend((best_delta, average_delta, points_delta))
-            previous_year = year
-        rows.append(tuple(row))
+        history = years[:index + 1]
+        if not any(artist.appearances_by_year.get(item, 0) > 0 for item in history):
+            continue
+
+        appearances = artist.appearances_by_year.get(year, 0)
+        best_position = artist.best_positions_by_year.get(year)
+        average_position = artist.average_positions_by_year.get(year)
+        previous_best = artist.best_positions_by_year.get(previous_year) if previous_year is not None else None
+        previous_average = artist.average_positions_by_year.get(previous_year) if previous_year is not None else None
+        previous_cumulative = sum(artist.points_by_year.get(item, 0) for item in years[:index])
+        current_year_points = artist.points_by_year.get(year, 0)
+        cumulative = previous_cumulative + current_year_points
+        points_delta = cumulative - previous_cumulative if previous_year is not None else None
+        best_delta = previous_best - best_position if previous_best is not None and best_position is not None else None
+        average_delta = previous_average - average_position if previous_average is not None and average_position is not None else None
+
+        earlier_appearances = [item for item in years[:index] if artist.appearances_by_year.get(item, 0) > 0]
+        if not appearances:
+            status = "OUT"
+        elif not earlier_appearances:
+            status = "NEW"
+        elif not artist.appearances_by_year.get(previous_year, 0):
+            status = "RE"
+        else:
+            status = ""
+
+        rows.append((
+            artist.artist, appearances, best_position, average_position,
+            current_year_points, cumulative, points_delta,
+            best_delta, average_delta, status,
+        ))
+
+    rows.sort(key=lambda row: (-int(row[5]), str(row[0]).casefold()))
     return rows
+
+
+def _write_yearly_report(
+    songs: list[SongStats], artists: list[ArtistStats], years: list[int], destination: Path,
+) -> Path:
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for year in years:
+        song_headers = [
+            "Песня", "Исполнители", "Год выпуска", "Позиция", "Баллы за год",
+            "Общие баллы на конец года", "Δ общих баллов", "Δ позиции*", "Статус",
+        ]
+        _write_sheet(
+            workbook, f"{year} Песни", song_headers,
+            _song_year_rows(songs, years, year),
+            widths={1: 30, 2: 34, 6: 25}, numeric_columns=set(range(3, 9)),
+        )
+        artist_headers = [
+            "Исполнитель", "Песен в рейтинге", "Лучшая позиция", "Средняя позиция",
+            "Баллы за год", "Общие баллы на конец года", "Δ общих баллов",
+            "Δ лучшей позиции*", "Δ средней позиции*", "Статус",
+        ]
+        _write_sheet(
+            workbook, f"{year} Исполнители", artist_headers,
+            _artist_year_rows(artists, years, year),
+            widths={1: 32, 6: 25}, numeric_columns=set(range(2, 10)),
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(destination)
+    workbook.close()
+    return destination
 
 
 def _artist_stability_rows(items: list[ArtistStabilityStats]) -> list[tuple[object, ...]]:
@@ -333,10 +405,15 @@ def generate_excel_report(
     output_path: str | Path | None = None,
     hall_of_fame_threshold: int = 3,
     interval_count: int = 7,
+    yearly_output_path: str | Path | None = None,
 ) -> Path:
-    """Создаёт расширенную книгу. Функция только читает SQLite-базу."""
+    """Создаёт общую и годовую книги. Функция только читает SQLite-базу."""
     database_path = Path(db_path) if db_path is not None else DATABASE_PATH
     destination = Path(output_path) if output_path is not None else DEFAULT_REPORT_PATH
+    yearly_destination = (
+        Path(yearly_output_path) if yearly_output_path is not None
+        else destination.with_name("music_yearly_analytics.xlsx")
+    )
 
     songs = get_song_statistics(database_path)
     artists = get_artist_statistics(database_path)
@@ -353,32 +430,14 @@ def generate_excel_report(
         "Песня", "Исполнители", "Год выпуска", "Попаданий", "Лучшая позиция",
         "Средняя позиция", "Средняя позиция с учётом отсутствий", "Баллы",
     ]
-    previous_year: int | None = None
-    for year in years:
-        song_headers.extend((f"{year}: позиция", f"{year}: баллы"))
-        if previous_year is not None:
-            song_headers.extend((f"{year}: Δ позиции*", f"{year}: Δ баллов"))
-        previous_year = year
     _write_sheet(
-        workbook, "Статистика песен", song_headers, _song_rows(songs, years),
+        workbook, "Статистика песен", song_headers, _song_summary_rows(songs),
         widths={1: 30, 2: 34, 7: 30}, numeric_columns=set(range(3, len(song_headers) + 1)),
     )
 
     artist_headers = ["Исполнитель", "Попаданий", "Лучшая позиция", "Средняя позиция", "Баллы"]
-    previous_year = None
-    for year in years:
-        artist_headers.extend((
-            f"{year}: попаданий", f"{year}: лучшая позиция",
-            f"{year}: средняя позиция", f"{year}: баллы",
-        ))
-        if previous_year is not None:
-            artist_headers.extend((
-                f"{year}: Δ лучшей позиции*", f"{year}: Δ средней позиции*",
-                f"{year}: Δ баллов",
-            ))
-        previous_year = year
     _write_sheet(
-        workbook, "Статистика исполнителей", artist_headers, _artist_rows(artists, years),
+        workbook, "Статистика исполнителей", artist_headers, _artist_summary_rows(artists),
         widths={1: 32}, numeric_columns=set(range(2, len(artist_headers) + 1)),
     )
 
@@ -423,10 +482,11 @@ def generate_excel_report(
     notes.append(["Десятилетия", "Год выпуска округляется вниз до начала десятилетия: 1987 год относится к 1980-м."])
     notes.append(["Равные интервалы", f"Используется {interval_count} общих интервалов по диапазону лет выпуска всех песен. Границы одинаковы для всех годовых рейтингов."])
     notes.append(["Δ позиции песни", "Позиция предыдущего рейтинга минус позиция текущего. Положительное значение — песня поднялась. Сравнение есть только если песня присутствовала в обоих соседних рейтингах."])
-    notes.append(["Δ баллов песни", "Баллы текущего года минус баллы предыдущего. Отсутствующая песня получает 0 баллов."])
+    notes.append(["Годовая аналитика", "Подробная аналитика вынесена в отдельную книгу: для каждого года есть листы песен и исполнителей. Общие баллы на конец года — накопленная сумма с начала истории; Δ общих баллов — разница накопленных итогов текущего и предыдущего рейтингового года."])
     notes.append(["Позиция исполнителя", "Для каждого года показываются лучшая и средняя позиции среди песен исполнителя; совместные песни засчитываются каждому исполнителю."])
     notes.append(["Δ позиции исполнителя", "Для лучшей и средней позиции: значение прошлого рейтинга минус значение текущего. Положительное значение — улучшение. Считается только если исполнитель присутствовал в обоих соседних рейтингах."])
-    notes.append(["Δ баллов исполнителя", "Сумма баллов исполнителя в текущем году минус сумма баллов предыдущего года."])
+    notes.append(["Статусы NEW, RE и OUT", "NEW — первое появление песни или исполнителя в истории рейтингов. RE — возвращение после отсутствия в предыдущем рейтинге. OUT — ранее появлялся, но отсутствует в рейтинге текущего года. Пустой статус означает присутствие и в предыдущем, и в текущем рейтингах."])
+    notes.append(["Накопительная годовая аналитика", "Каждый годовой лист включает все песни и исполнителей, появлявшихся в любом рейтинге с начала истории по выбранный год, даже если они отсутствуют в текущем рейтинге. Строки сортируются по общим накопленным баллам на конец выбранного года по убыванию; при равенстве используется алфавитная сортировка."])
     notes.append(["Устойчивость исполнителя", "Доля присутствия — число рейтингов с исполнителем / общее число рейтингов. Серия подряд считается по последовательности имеющихся рейтингов, а не по календарным годам. Максимум песен и среднее число песен показывают ширину каталога в рейтингах."])
     notes.append(["Концентрация баллов", "Доля баллов самого результативного трека — баллы этого трека / все баллы исполнителя. Чем выше доля, тем сильнее общий результат зависит от одной песни."])
     notes.append(["Сортировка лет", "Сравнение выполняется между соседними годами, для которых существуют рейтинги, даже если календарный год между ними пропущен."])
@@ -448,6 +508,7 @@ def generate_excel_report(
     destination.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(destination)
     workbook.close()
+    _write_yearly_report(songs, artists, years, yearly_destination)
     return destination
 
 

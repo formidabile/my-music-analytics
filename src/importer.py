@@ -834,7 +834,7 @@ def run_project_import(*, replace_existing: bool = False) -> ImportResult:
 def main() -> int:
     """Точка входа без аргументов командной строки."""
     try:
-        result = run_project_import()
+        result = run_project_import(replace_existing=True)
     except WorkbookValidationError as exc:
         print("Ошибки Excel:", file=sys.stderr)
         for error in exc.errors:

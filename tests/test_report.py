@@ -22,6 +22,7 @@ class ExcelReportTests(unittest.TestCase):
         self.db_path = self.root / "music.db"
         self.workbook_path = self.root / "source.xlsx"
         self.output_path = self.root / "nested" / "report.xlsx"
+        self.yearly_output_path = self.root / "nested" / "music_yearly_analytics.xlsx"
         self._create_workbook()
         import_excel(self.workbook_path, self.db_path)
 
@@ -82,6 +83,11 @@ class ExcelReportTests(unittest.TestCase):
         self.assertEqual(songs.cell(2, 1).value, "Shared track")
         self.assertEqual(songs.cell(2, 4).value, 2)
         self.assertEqual(songs.cell(2, 8).value, 99)
+        self.assertEqual([cell.value for cell in songs[1]], [
+            "Песня", "Исполнители", "Год выпуска", "Попаданий", "Лучшая позиция",
+            "Средняя позиция", "Средняя позиция с учётом отсутствий", "Баллы",
+        ])
+        self.assertTrue(self.yearly_output_path.is_file())
 
         yearly = workbook["Статистика по годам"]
         self.assertEqual(yearly.max_row, 3)
@@ -97,7 +103,7 @@ class ExcelReportTests(unittest.TestCase):
         self.assertEqual(workbook["_Данные графиков"].sheet_state, "hidden")
         self.assertEqual(len(workbook["Графики по годам"]._charts), 4)
         self.assertEqual(len(workbook["Общие графики"]._charts), 4)
-        self.assertEqual(workbook["Методика"].max_row, 13)
+        self.assertEqual(workbook["Методика"].max_row, 14)
 
         # В годовых диаграммах нет ошибочной серии «Категория»:
         # подписи категорий используются только как названия рядов.
@@ -116,23 +122,59 @@ class ExcelReportTests(unittest.TestCase):
         self.assertEqual(stability.cell(artist_a_stability, stability_headers.index("Рейтингов с присутствием") + 1).value, 2)
         self.assertEqual(stability.cell(artist_a_stability, stability_headers.index("Самая длинная серия рейтингов подряд") + 1).value, 2)
 
-        # Для песни, присутствующей в обоих годах, дельта позиции и баллов рассчитана.
-        headers = [cell.value for cell in songs[1]]
-        delta_position_col = headers.index("2024: Δ позиции*") + 1
-        delta_points_col = headers.index("2024: Δ баллов") + 1
-        self.assertEqual(songs.cell(2, delta_position_col).value, -1)
-        self.assertEqual(songs.cell(2, delta_points_col).value, -1)
-
-        artists = workbook["Статистика исполнителей"]
-        artist_headers = [cell.value for cell in artists[1]]
-        artist_row = next(
-            row for row in range(2, artists.max_row + 1)
-            if artists.cell(row, 1).value == "Artist A"
-        )
-        self.assertEqual(artists.cell(artist_row, artist_headers.index("2024: Δ лучшей позиции*") + 1).value, -1)
-        self.assertEqual(artists.cell(artist_row, artist_headers.index("2024: Δ средней позиции*") + 1).value, -1)
-        self.assertEqual(artists.cell(artist_row, artist_headers.index("2024: Δ баллов") + 1).value, -1)
+        # Подробная годовая аналитика вынесена в отдельную книгу.
         workbook.close()
+        yearly_workbook = load_workbook(self.yearly_output_path, data_only=True)
+        self.assertEqual(yearly_workbook.sheetnames, [
+            "2023 Песни", "2023 Исполнители", "2024 Песни", "2024 Исполнители",
+        ])
+        songs_2023 = yearly_workbook["2023 Песни"]
+        self.assertEqual(songs_2023.cell(2, 1).value, "Shared track")
+        self.assertEqual(songs_2023.cell(2, 6).value, 50)
+
+        songs_2024 = yearly_workbook["2024 Песни"]
+        song_headers = [cell.value for cell in songs_2024[1]]
+        self.assertEqual(songs_2024.max_row, 100)  # все 99 песни, появлявшиеся в 2023 или 2024
+        self.assertEqual(songs_2024.cell(2, 1).value, "Shared track")  # сортировка по накопленным баллам
+        shared_song_row = next(
+            row for row in range(2, songs_2024.max_row + 1)
+            if songs_2024.cell(row, 1).value == "Shared track"
+        )
+        self.assertEqual(songs_2024.cell(shared_song_row, song_headers.index("Общие баллы на конец года") + 1).value, 99)
+        self.assertEqual(songs_2024.cell(shared_song_row, song_headers.index("Δ общих баллов") + 1).value, 49)
+        self.assertEqual(songs_2024.cell(shared_song_row, song_headers.index("Δ позиции*") + 1).value, -1)
+        self.assertEqual(songs_2024.cell(shared_song_row, song_headers.index("Статус") + 1).value, None)
+        new_song_row = next(
+            row for row in range(2, songs_2024.max_row + 1)
+            if songs_2024.cell(row, 1).value == "Other song 1"
+        )
+        self.assertEqual(songs_2024.cell(new_song_row, song_headers.index("Статус") + 1).value, "NEW")
+        absent_song_row = next(
+            row for row in range(2, songs_2024.max_row + 1)
+            if songs_2024.cell(row, 1).value == "Song 2"
+        )
+        self.assertEqual(songs_2024.cell(absent_song_row, song_headers.index("Позиция") + 1).value, None)
+        self.assertEqual(songs_2024.cell(absent_song_row, song_headers.index("Баллы за год") + 1).value, 0)
+        self.assertEqual(songs_2024.cell(absent_song_row, song_headers.index("Общие баллы на конец года") + 1).value, 49)
+        self.assertEqual(songs_2024.cell(absent_song_row, song_headers.index("Статус") + 1).value, "OUT")
+
+        artists_2024 = yearly_workbook["2024 Исполнители"]
+        artist_headers = [cell.value for cell in artists_2024[1]]
+        artist_row = next(
+            row for row in range(2, artists_2024.max_row + 1)
+            if artists_2024.cell(row, 1).value == "Artist A"
+        )
+        self.assertEqual(artists_2024.cell(artist_row, artist_headers.index("Δ лучшей позиции*") + 1).value, -1)
+        self.assertEqual(artists_2024.cell(artist_row, artist_headers.index("Δ средней позиции*") + 1).value, -1)
+        self.assertEqual(artists_2024.cell(artist_row, artist_headers.index("Общие баллы на конец года") + 1).value, 99)
+        self.assertEqual(artists_2024.cell(artist_row, artist_headers.index("Δ общих баллов") + 1).value, 49)
+        artist_absent_row = next(
+            row for row in range(2, artists_2024.max_row + 1)
+            if artists_2024.cell(row, 1).value == "Artist 2"
+        )
+        self.assertEqual(artists_2024.cell(artist_absent_row, artist_headers.index("Статус") + 1).value, "OUT")
+        self.assertEqual(artists_2024.cell(artist_absent_row, artist_headers.index("Общие баллы на конец года") + 1).value, 49)
+        yearly_workbook.close()
 
     def test_composition_statistics_support_multiple_countries_and_languages(self) -> None:
         items = get_composition_statistics(self.db_path, interval_count=7)
