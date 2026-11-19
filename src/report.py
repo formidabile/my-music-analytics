@@ -10,7 +10,7 @@ from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from src.analytics import (
+from .analytics import (
     ArtistStats,
     ArtistStabilityStats,
     CompositionStats,
@@ -24,7 +24,7 @@ from src.analytics import (
     get_song_statistics,
     get_yearly_statistics,
 )
-from src.database import BASE_DIR, DATABASE_PATH
+from .database import BASE_DIR, DATABASE_PATH
 
 DEFAULT_REPORT_PATH = BASE_DIR / "reports" / "music_analytics.xlsx"
 

@@ -85,3 +85,40 @@ WHEN NEW.position > (
 BEGIN
     SELECT RAISE(ABORT, 'position exceeds ranking top_size');
 END;
+
+-- Прогнозы хранятся отдельно от фактических рейтингов.
+CREATE TABLE IF NOT EXISTS forecast_years (
+    forecast_year INTEGER PRIMARY KEY CHECK (forecast_year BETWEEN 1900 AND 2100)
+);
+
+CREATE TABLE IF NOT EXISTS forecast_entries (
+    forecast_entry_id INTEGER PRIMARY KEY,
+    forecast_year INTEGER NOT NULL,
+    predicted_position INTEGER NOT NULL CHECK (predicted_position > 0),
+    title TEXT NOT NULL,
+    release_year INTEGER NOT NULL CHECK (release_year BETWEEN 1900 AND 2100),
+    artists_json TEXT NOT NULL,
+    languages_json TEXT NOT NULL,
+    countries_json TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    UNIQUE (forecast_year, predicted_position),
+    UNIQUE (forecast_year, identity_key),
+    FOREIGN KEY (forecast_year) REFERENCES forecast_years(forecast_year) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_entries_identity
+    ON forecast_entries(identity_key);
+
+
+-- Стриминговый Top-5 использует общий справочник исполнителей.
+CREATE TABLE IF NOT EXISTS streaming_entries (
+    year INTEGER NOT NULL CHECK (year BETWEEN 1900 AND 2100),
+    artist_id INTEGER NOT NULL,
+    position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 5),
+    listening_minutes INTEGER CHECK (listening_minutes IS NULL OR listening_minutes >= 0),
+    PRIMARY KEY (year, position),
+    UNIQUE (year, artist_id),
+    FOREIGN KEY (artist_id) REFERENCES artists(artist_id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_streaming_entries_artist
+    ON streaming_entries(artist_id);

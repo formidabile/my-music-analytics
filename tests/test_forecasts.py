@@ -71,6 +71,14 @@ class ForecastTests(unittest.TestCase):
         summary = workbook["Сводка прогнозов"]
         self.assertEqual(summary.cell(2, 1).value, 2024)
         self.assertEqual(summary.cell(2, 4).value, 1)
+        # 2024: 49 unexpected tracks in the synthetic Top-50; positions 2..50.
+        self.assertEqual(summary.cell(2, 13).value, 26)
+        self.assertEqual(summary.cell(2, 14).value, 26)
+        self.assertEqual(summary.cell(2, 15).value, 2)
+        self.assertEqual(summary.cell(2, 16).value, 50)
+        self.assertEqual(summary.cell(2, 17).value, 9)
+        self.assertEqual(summary.cell(2, 18).value, 19)
+        self.assertAlmostEqual(summary.cell(2, 19).value, 49 / 50)
         self.assertEqual(workbook["Отложенные попадания"].cell(2, 1).value, 2024)
         self.assertEqual(workbook["Повторные прогнозы"].cell(2, 1).value, "Repeat")
         self.assertTrue(any(

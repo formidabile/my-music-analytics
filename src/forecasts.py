@@ -11,7 +11,7 @@ from typing import Iterable
 
 from openpyxl import load_workbook
 
-from src.database import DATABASE_PATH, get_connection, initialize_database
+from .database import DATABASE_PATH, get_connection, initialize_database
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FORECAST_WORKBOOK_PATH = BASE_DIR / "data" / "music_predictions.xlsx"

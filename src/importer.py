@@ -415,9 +415,8 @@ def read_workbook(excel_path: str | Path, top_size: int = TOP_SIZE) -> WorkbookD
 
 def _ensure_database_ready(db_path: str | Path) -> None:
     path = Path(db_path)
-    if not path.exists() or path.stat().st_size == 0:
-        initialize_database(path)
-        return
+    # Идемпотентное применение схемы также добавляет новые таблицы в старые БД.
+    initialize_database(path)
 
     with get_connection(path) as connection:
         tables = {

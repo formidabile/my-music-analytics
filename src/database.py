@@ -20,6 +20,7 @@ REQUIRED_TABLES = {
     "song_languages",
     "rankings",
     "ranking_entries",
+    "streaming_entries",
 }
 
 

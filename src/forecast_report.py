@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from statistics import mean, median
 from pathlib import Path
 from typing import Sequence
 
@@ -78,16 +79,34 @@ def generate_forecast_report(
     if not metrics:
         _write_sheet(wb, "Информация", ["Статус"], [["В базе данных пока нет прогнозов."]])
     else:
-        metric_rows = [(
-            m.year, m.predicted_count, m.actual_count, m.hits, m.misses, m.unexpected,
-            m.precision, m.recall, m.mae, m.exact_matches, m.within_5, m.within_10,
-        ) for m in metrics]
+        unexpected_by_year: dict[int, list[int]] = defaultdict(list)
+        for item in unexpected:
+            if item.actual_position is not None:
+                unexpected_by_year[item.forecast_year].append(item.actual_position)
+
+        metric_rows = []
+        for m in metrics:
+            positions = unexpected_by_year[m.year]
+            metric_rows.append((
+                m.year, m.predicted_count, m.actual_count, m.hits, m.misses, m.unexpected,
+                m.precision, m.recall, m.mae, m.exact_matches, m.within_5, m.within_10,
+                mean(positions) if positions else None,
+                median(positions) if positions else None,
+                min(positions) if positions else None,
+                max(positions) if positions else None,
+                sum(position <= 10 for position in positions),
+                sum(position <= 20 for position in positions),
+                len(positions) / m.actual_count if m.actual_count else 0.0,
+            ))
         _write_sheet(wb, "Сводка прогнозов", [
             "Год прогноза", "Песен в прогнозе", "Песен в фактическом Top-50", "Попаданий",
             "Не попали", "Неожиданных песен", "Precision", "Recall", "MAE",
             "Точная позиция", "Ошибка ≤ 5", "Ошибка ≤ 10",
+            "Средняя позиция неожиданных", "Медианная позиция неожиданных",
+            "Лучшая позиция неожиданной", "Худшая позиция неожиданной",
+            "Неожиданных в Top-10", "Неожиданных в Top-20", "Доля неожиданных от Top-50",
         ], metric_rows)
-        for col in (7, 8):
+        for col in (7, 8, 19):
             for cell in wb["Сводка прогнозов"][get_column_letter(col)][1:]:
                 cell.number_format = "0.0%"
 
@@ -142,6 +161,7 @@ def generate_forecast_report(
         notes = [
             ("Precision", "Попадания / число песен в прогнозе. Непредсказанные позиции неполного прогноза не считаются ошибками."),
             ("Recall", "Попадания / число песен фактического Top-50."),
+            ("Статистика неожиданных попаданий", "Рассчитывается по песням фактического Top-50, отсутствовавшим в прогнозе этого же года. Средняя и медианная позиции — по фактическим местам; лучшая — минимальный номер позиции, худшая — максимальный. Доля — число неожиданных песен / размер фактического Top-50."),
             ("MAE", "Среднее абсолютное отклонение позиций только для песен, попавших в Top-50 в год прогноза."),
             ("Ошибка позиции", "Фактическая позиция минус прогнозная. Положительное значение означает, что песня оказалась ниже прогноза."),
             ("Отложенное попадание", "Песня не попала в Top-50 в год прогноза, но впервые появилась в одном из последующих фактических рейтингов. Задержка считается от первого года прогноза."),
