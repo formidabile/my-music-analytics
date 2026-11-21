@@ -10,8 +10,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from src.database import BASE_DIR, DATABASE_PATH
-from src.forecasts import ForecastComparison, get_delayed_forecasts, get_forecast_analysis
+from .database import BASE_DIR, DATABASE_PATH
+from .forecasts import ForecastComparison, get_delayed_forecasts, get_forecast_analysis
 
 DEFAULT_FORECAST_REPORT_PATH = BASE_DIR / "reports" / "music_forecast_analytics.xlsx"
 HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")

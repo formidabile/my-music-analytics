@@ -52,6 +52,7 @@ class YearStats:
     top_size: int
     entries: int
     new_songs: int
+    repeated_songs: int
     returning_songs: int
     average_position: float
 
@@ -67,6 +68,20 @@ class HallOfFameEntry:
     best_position: int
     average_position: float
     total_points: int
+
+
+@dataclass(frozen=True)
+class SongStabilityStats:
+    """Показатели устойчивости присутствия песни в годовых рейтингах."""
+
+    song_id: int
+    title: str
+    artists: tuple[str, ...]
+    years_present: int
+    total_ranking_years: int
+    presence_rate: float
+    longest_streak: int
+    current_streak: int
 
 
 @dataclass(frozen=True)
@@ -271,6 +286,51 @@ def get_artist_statistics(db_path: str | Path | None = None) -> list[ArtistStats
     )
 
 
+def get_song_stability_statistics(
+    db_path: str | Path | None = None,
+) -> list[SongStabilityStats]:
+    """Оценивает регулярность присутствия каждой песни в рейтингах.
+
+    Серии считаются по соседним доступным выпускам рейтинга, а не по
+    календарной разнице между годами.
+    """
+    songs = get_song_statistics(db_path)
+    if not songs:
+        return []
+
+    total_years = len(songs[0].positions_by_year)
+    result: list[SongStabilityStats] = []
+    for song in songs:
+        flags = [song.positions_by_year[year] is not None for year in sorted(song.positions_by_year)]
+        longest_streak = current_streak = streak = 0
+        for present in flags:
+            if present:
+                streak += 1
+                longest_streak = max(longest_streak, streak)
+            else:
+                streak = 0
+        for present in reversed(flags):
+            if not present:
+                break
+            current_streak += 1
+        years_present = sum(flags)
+        result.append(SongStabilityStats(
+            song_id=song.song_id,
+            title=song.title,
+            artists=song.artists,
+            years_present=years_present,
+            total_ranking_years=total_years,
+            presence_rate=years_present / total_years if total_years else 0.0,
+            longest_streak=longest_streak,
+            current_streak=current_streak,
+        ))
+
+    return sorted(result, key=lambda item: (
+        -item.presence_rate, -item.longest_streak, -item.current_streak,
+        -item.years_present, item.title.casefold(),
+    ))
+
+
 def get_artist_stability_statistics(
     db_path: str | Path | None = None,
 ) -> list[ArtistStabilityStats]:
@@ -377,9 +437,9 @@ def get_hall_of_fame(
 def get_yearly_statistics(db_path: str | Path | None = None) -> list[YearStats]:
     """Возвращает сводные показатели по каждому годовому рейтингу.
 
-    Новая песня — та, которая впервые появилась в рейтингах именно в этом году.
-    Повторная — уже встречавшаяся хотя бы в одном более раннем рейтинге.
-    Средняя позиция рассчитывается по всем строкам рейтинга за год.
+    Новая песня впервые появляется в истории рейтингов. Повторное попадание
+    продолжает присутствие в непосредственно предыдущем доступном рейтинге.
+    Возвращение — повторное появление после отсутствия в предыдущем рейтинге.
     """
     rankings, rows = _read_ranking_data(db_path)
     if not rankings:
@@ -388,28 +448,31 @@ def get_yearly_statistics(db_path: str | Path | None = None) -> list[YearStats]:
     # В выборке одна песня может повторяться из-за нескольких исполнителей.
     # Для годовой статистики учитываем каждую запись рейтинга ровно один раз.
     positions_by_year: dict[int, dict[int, int]] = {year: {} for year in rankings}
-    first_appearance: dict[int, int] = {}
     for row in rows:
-        song_id = row["song_id"]
-        year = row["ranking_year"]
-        positions_by_year[year][song_id] = row["position"]
-        first_appearance[song_id] = min(first_appearance.get(song_id, year), year)
+        positions_by_year[row["ranking_year"]][row["song_id"]] = row["position"]
 
+    seen_before: set[int] = set()
+    previous_year_songs: set[int] = set()
     result: list[YearStats] = []
     for year, top_size in rankings.items():
         positions = positions_by_year[year]
-        new_songs = sum(1 for song_id in positions if first_appearance[song_id] == year)
-        returning_songs = len(positions) - new_songs
+        current_songs = set(positions)
+        new_songs = len(current_songs - seen_before)
+        repeated_songs = len(current_songs & previous_year_songs)
+        returning_songs = len(current_songs & (seen_before - previous_year_songs))
         result.append(
             YearStats(
                 year=year,
                 top_size=top_size,
-                entries=len(positions),
+                entries=len(current_songs),
                 new_songs=new_songs,
+                repeated_songs=repeated_songs,
                 returning_songs=returning_songs,
                 average_position=mean(positions.values()) if positions else 0.0,
             )
         )
+        seen_before.update(current_songs)
+        previous_year_songs = current_songs
     return result
 
 

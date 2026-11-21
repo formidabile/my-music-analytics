@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#111827">
+    <title>{{ title }} · Music Statistics</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">♫</span><span><strong>Music</strong><small>STATISTICS</small></span></a>
+        <div class="nav-label">РАЗДЕЛЫ</div>
+        <nav class="navigation">
+            <a class="nav-link" href="/"><span class="nav-icon">⌂</span>Главная</a>
+            <a class="nav-link active" href="/rankings"><span class="nav-icon">≡</span>Рейтинги</a>
+            <a class="nav-link" href="/analytics"><span class="nav-icon">▥</span>Аналитика</a>
+            <a class="nav-link" href="/streaming"><span class="nav-icon">♫</span>Стриминги</a>
+            <a class="nav-link" href="/forecasts"><span class="nav-icon">◷</span>Прогнозы</a>
+        </nav>
+        <div class="sidebar-footer"><span class="status-dot"></span> Локальная версия</div>
+    </aside>
+    <main class="main-content">
+        <header class="topbar"><div class="breadcrumb"><a href="/rankings">РЕЙТИНГИ</a> <span>/</span> {{ 'ПЕСНЯ' if entity_type == 'song' else 'ИСПОЛНИТЕЛЬ' }}</div><div class="topbar-note">PERSONAL ANALYTICS</div></header>
+        <section class="page-heading"><p class="eyebrow">{{ 'SONG PROFILE' if entity_type == 'song' else 'ARTIST PROFILE' }}</p><h1>{{ title }}</h1>
+            {% if entity_type == 'song' %}<p class="page-description">{{ item.artists|join('; ') }} · {{ item.release_year }}</p>{% endif %}
+        </section>
+        {% if entity_type == 'song' %}
+        <section class="grid kpi-grid">
+            <div class="kpi-card"><div class="kpi-label">Попаданий в Top-50</div><div class="kpi-value">{{ item.appearances }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Всего баллов</div><div class="kpi-value">{{ item.total_points }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Лучшая позиция</div><div class="kpi-value">#{{ item.best_position }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Средняя позиция</div><div class="kpi-value">{{ '%.1f'|format(item.average_position) }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Попаданий в Top-10</div><div class="kpi-value">{{ item.top10_appearances }}</div></div>
+        </section>
+        <section class="grid two-column">
+            <div class="panel"><div class="panel-header"><h2 class="panel-title">История позиций в рейтинге</h2></div><div class="chart-wrap"><canvas id="song-position-chart"></canvas></div></div>
+            <div class="panel"><div class="panel-header"><h2 class="panel-title">История по годам</h2></div><table class="data-table"><thead><tr><th>Год</th><th>Позиция</th><th>Баллы</th></tr></thead><tbody>{% for row in item.history %}<tr><td>{{ row.year }}</td><td>{{ '#' ~ row.position if row.position else '—' }}</td><td>{{ row.points }}</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+        <section class="panel"><h2 class="panel-title">Информация о песне</h2><p class="muted">Страна: {{ item.countries|join(', ') if item.countries else 'Не указано' }}</p><p class="muted">Язык: {{ item.languages|join(', ') if item.languages else 'Не указано' }}</p><p class="muted">Средняя позиция с учётом отсутствий: {{ '%.1f'|format(item.average_position_with_absences) }}</p></section>
+        {% else %}
+        <section class="grid kpi-grid">
+            <div class="kpi-card"><div class="kpi-label">Попаданий песен</div><div class="kpi-value">{{ item.appearances }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Всего баллов</div><div class="kpi-value">{{ item.total_points }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Лучшая позиция</div><div class="kpi-value">#{{ item.best_position }}</div></div>
+            <div class="kpi-card"><div class="kpi-label">Средняя позиция</div><div class="kpi-value">{{ '%.1f'|format(item.average_position) }}</div></div>
+        </section>
+        <section class="grid two-column">
+            <div class="panel"><div class="panel-header"><h2 class="panel-title">Баллы по годам</h2></div><div class="chart-wrap"><canvas id="artist-points-chart"></canvas></div></div>
+            <div class="panel"><div class="panel-header"><h2 class="panel-title">Количество песен в Top-50</h2></div><div class="chart-wrap"><canvas id="artist-appearances-chart"></canvas></div></div>
+        </section>
+        <section class="panel"><h2 class="panel-title">Песни исполнителя</h2><table class="data-table"><thead><tr><th>#</th><th>Песня</th><th>Год выпуска</th><th>Попаданий</th><th>Лучшее место</th><th>Баллы</th></tr></thead><tbody>{% for song in item.songs %}<tr><td>{{ loop.index }}</td><td><a href="/songs/{{ song.song_id }}">{{ song.title }}</a></td><td>{{ song.release_year }}</td><td>{{ song.appearances }}</td><td>#{{ song.best_position }}</td><td>{{ song.total_points }}</td></tr>{% endfor %}</tbody></table></section>
+        {% endif %}
+        <footer class="footer"><a href="/rankings">← Вернуться к рейтингам</a></footer>
+    </main>
+</div>
+<script>
+const historyData = {{ item.history | tojson }};
+const chartText = '#a9bad1';
+const gridColor = 'rgba(148,163,184,.10)';
+const baseOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: chartText } } },
+    scales: {
+        x: { ticks: { color: chartText }, grid: { color: gridColor } },
+        y: { ticks: { color: chartText }, grid: { color: gridColor }, beginAtZero: true }
+    }
+};
+{% if entity_type == 'song' %}
+new Chart(document.getElementById('song-position-chart'), {
+    type: 'line',
+    data: {
+        labels: historyData.map(row => row.year),
+        datasets: [{
+            label: 'Позиция в Top-50',
+            data: historyData.map(row => row.position),
+            borderColor: '#63a9ef',
+            backgroundColor: 'rgba(99,169,239,.15)',
+            pointRadius: 5,
+            spanGaps: false,
+            tension: .2
+        }]
+    },
+    options: {
+        ...baseOptions,
+        scales: {
+            ...baseOptions.scales,
+            y: { ...baseOptions.scales.y, reverse: true, min: 1, max: 50, ticks: { color: chartText, stepSize: 5, callback: value => '#' + value } }
+        },
+        plugins: { legend: { labels: { color: chartText } }, tooltip: { callbacks: { label: context => context.raw == null ? 'Не попадала в Top-50' : 'Позиция: #' + context.raw } } }
+    }
+});
+{% else %}
+new Chart(document.getElementById('artist-points-chart'), {
+    type: 'bar',
+    data: {
+        labels: historyData.map(row => row.year),
+        datasets: [{ label: 'Баллы', data: historyData.map(row => row.points), backgroundColor: '#63a9ef', borderRadius: 5 }]
+    },
+    options: baseOptions
+});
+new Chart(document.getElementById('artist-appearances-chart'), {
+    type: 'line',
+    data: {
+        labels: historyData.map(row => row.year),
+        datasets: [{ label: 'Песен в Top-50', data: historyData.map(row => row.appearances), borderColor: '#53c7a0', backgroundColor: 'rgba(83,199,160,.15)', pointRadius: 5, tension: .2 }]
+    },
+    options: baseOptions
+});
+{% endif %}
+</script>
+</body>
+</html>

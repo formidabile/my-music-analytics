@@ -91,9 +91,10 @@ class ExcelReportTests(unittest.TestCase):
 
         yearly = workbook["Статистика по годам"]
         self.assertEqual(yearly.max_row, 3)
-        self.assertEqual([yearly.cell(2, col).value for col in range(1, 6)], [2023, 50, 50, 50, 0])
-        self.assertEqual([yearly.cell(3, col).value for col in range(1, 6)], [2024, 50, 50, 49, 1])
-        self.assertAlmostEqual(yearly.cell(3, 6).value, 0.02)
+        self.assertEqual([yearly.cell(2, col).value for col in range(1, 7)], [2023, 50, 50, 50, 0, 0])
+        self.assertEqual([yearly.cell(3, col).value for col in range(1, 7)], [2024, 50, 50, 49, 1, 0])
+        self.assertAlmostEqual(yearly.cell(3, 7).value, 0.02)
+        self.assertAlmostEqual(yearly.cell(3, 8).value, 0.0)
 
         composition = workbook["Состав по годам"]
         # Строки содержат только категории, реально представленные в рейтинге.
@@ -103,7 +104,7 @@ class ExcelReportTests(unittest.TestCase):
         self.assertEqual(workbook["_Данные графиков"].sheet_state, "hidden")
         self.assertEqual(len(workbook["Графики по годам"]._charts), 4)
         self.assertEqual(len(workbook["Общие графики"]._charts), 4)
-        self.assertEqual(workbook["Методика"].max_row, 14)
+        self.assertEqual(workbook["Методика"].max_row, 15)
 
         # В годовых диаграммах нет ошибочной серии «Категория»:
         # подписи категорий используются только как названия рядов.

@@ -8,8 +8,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from src.database import BASE_DIR, DATABASE_PATH, get_connection, initialize_database
-from src.importer import normalize_value
+from .database import BASE_DIR, DATABASE_PATH, get_connection, initialize_database
+from .importer import normalize_value
 
 WORKBOOK_PATH = BASE_DIR / "data" / "music_streaming.xlsx"
 

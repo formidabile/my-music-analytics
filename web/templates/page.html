@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#111827">
+    <title>{{ title }} · Music Statistics</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="{{ url_for('static', path='js/app.js') }}"></script>
+</head>
+<body data-page="{{ page }}">
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/">
+            <span class="brand-mark">♫</span>
+            <span><strong>Music</strong><small>STATISTICS</small></span>
+        </a>
+        <div class="nav-label">РАЗДЕЛЫ</div>
+        <nav class="navigation">
+            {% for key, item in pages.items() %}
+            <a class="nav-link {% if page == key %}active{% endif %}" href="{% if key == 'overview' %}/{% else %}/{{ key }}{% endif %}">
+                <span class="nav-icon">
+                    {% if key == 'overview' %}⌂{% elif key == 'rankings' %}≡{% elif key == 'analytics' %}▥{% elif key == 'streaming' %}♫{% else %}◷{% endif %}
+                </span>
+                {{ item[0] }}
+            </a>
+            {% endfor %}
+        </nav>
+        <div class="sidebar-footer"><span class="status-dot"></span> Локальная версия</div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div class="breadcrumb">MUSIC STATISTICS <span>/</span> {{ title|upper }}</div>
+            <div class="topbar-note">PERSONAL ANALYTICS</div>
+        </header>
+        <section class="page-heading">
+            <div><p class="eyebrow">MUSIC DATA PLATFORM</p><h1>{{ title }}</h1><p class="page-description">{{ description }}</p></div>
+        </section>
+        <section id="page-content" class="content-area">
+            <div class="loading-state">Загрузка данных…</div>
+        </section>
+        <footer class="footer">Music Statistics Dashboard <span>·</span> локальный аналитический проект</footer>
+    </main>
+</div>
+</body>
+</html>
